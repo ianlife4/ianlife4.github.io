@@ -71,7 +71,8 @@ def get_dxy():
         raise ValueError("DXY history too short")
     chg20 = last / closes[-21] - 1
     opt = 2 if chg20 >= 0.02 else (0 if chg20 <= -0.02 else 1)  # strong/weak/neutral
-    return {"chg20d": round(chg20, 4), "opt": opt}
+    # 頁面只用 opt;chg20d 僅供除錯,取 2 位避免微小跳動觸發無意義 commit
+    return {"chg20d": round(chg20, 2), "opt": opt}
 
 
 def get_enso():
@@ -183,6 +184,12 @@ def main():
     if not ok:
         print("FATAL: all sources failed, leaving file untouched")
         return 1
+
+    # 真正的資料(排除時間戳)沒變就不碰檔案,避免無意義 commit 與 Pages rebuild
+    strip = lambda d: {k: v for k, v in d.items() if k != "updated"}  # noqa: E731
+    if strip(old) == strip(data):
+        print(f"no data change (ok={ok}); leaving file untouched")
+        return 0
 
     data["updated"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     new_json = json.dumps(data, ensure_ascii=True, separators=(",", ":"))
