@@ -83,6 +83,10 @@
   .opt.on.bull{border-color:var(--bull-dim); box-shadow:inset 0 0 0 1px var(--bull-dim)}
   .opt.on.bear{border-color:var(--bear-dim); box-shadow:inset 0 0 0 1px var(--bear-dim)}
 
+  .alert{border:1px solid var(--gold-dim); background:rgba(224,169,59,.06); border-radius:var(--r); padding:15px 20px 17px; margin-bottom:22px}
+  .alert .line{font-size:13.5px; color:var(--text); margin-top:8px; line-height:1.55}
+  .alert .line::before{content:'· '; color:var(--gold); font-weight:700}
+
   .evi{font-family:var(--f-mono); font-size:11px; color:var(--faint); margin-top:9px; line-height:1.7}
   .evi b{color:var(--gold); font-weight:600}
   .evi .dim{color:#54504a}
@@ -162,6 +166,11 @@
   </div>
 </section>
 
+<section class="alert" id="alertBox" hidden>
+  <span class="eyebrow">Tightness Alert · 供需緊俏警示</span>
+  <div id="alertLines"></div>
+</section>
+
 <div class="grid2">
   <section class="panel">
     <h2>Signal scorecard<span class="zh">訊號計分卡</span></h2>
@@ -218,7 +227,7 @@
   <p style="margin-top:8px"><strong>資料來源：</strong>USDA WASDE（庫銷比）、NOAA CPC（ENSO）、Yahoo Finance（ZS／DXY／ZL／ZM）、Open-Meteo（南美三產區雨量）、USDA FAS ESR（對華出口銷售）。以上由 GitHub Actions 每日自動更新<span id="updNote"></span>；ENSO／庫銷比／美元／生柴自動預選，南美天氣與中國買盤帶入參考數據後由人工點選。歷史逐季價格與庫銷比為近似還原值，精算請對 USDA Consolidated Historical WASDE CSV。本工具為研究輔助，非投資建議。</p>
 </footer>
 
-<script type="application/json" id="live">{"price":{"last":1113.0,"chg":-2.75,"asOf":"2026-06-12","contract":"Soybean Futures,Jul-2026"},"dxy":{"chg20d":0.01,"opt":1},"enso":{"status":"El Ni\u00f1o Advisory","oni":0.48,"opt":3},"stu":{"my":"2025/26","pct":8.0,"opt":2,"all":[["2024/25",7.4],["2025/26",8.0],["2026/27",6.9]],"wasde":"2026-06-11"},"updated":"2026-06-12T04:10:43Z","sa":{"window":false,"regions":[{"n":"\u963f\u6839\u5ef7\u6838\u5fc3","p30":17,"norm":51,"fc14":3},{"n":"\u5df4\u897f\u5357","p30":150,"norm":106,"fc14":68},{"n":"\u99ac\u6258","p30":8,"norm":13,"fc14":3}]},"china":{"wk":"2026-06-04","net":2086,"sum4":86209,"commit":11956436,"prevCommit":22478500,"pace":0.53,"hint":2},"oil":{"zl":74.03,"zm":302.8,"zl60":0.13,"share":0.53,"opt":0}}</script>
+<script type="application/json" id="live">{"price":{"last":1113.25,"chg":-2.5,"asOf":"2026-06-12","contract":"Soybean Futures,Jul-2026"},"dxy":{"chg20d":0.01,"opt":1},"enso":{"status":"El Ni\u00f1o Advisory","oni":0.48,"opt":3},"stu":{"my":"2025/26","pct":8.0,"opt":2,"all":[["2024/25",7.4],["2025/26",8.0],["2026/27",6.9]],"wasde":"2026-06-11"},"updated":"2026-06-12T04:49:40Z","sa":{"window":false,"regions":[{"n":"\u963f\u6839\u5ef7\u6838\u5fc3","p30":17,"norm":51,"fc14":3},{"n":"\u5df4\u897f\u5357","p30":150,"norm":106,"fc14":68},{"n":"\u99ac\u6258","p30":8,"norm":13,"fc14":3}]},"china":{"wk":"2026-06-04","net":2086,"sum4":86209,"commit":11956436,"prevCommit":22478500,"pace":0.53,"hint":2},"oil":{"zl":73.97,"zm":302.8,"zl60":0.13,"share":0.53,"opt":0},"alerts":[]}</script>
 <script>
 (function(){
   let LIVE=null;
@@ -367,6 +376,10 @@
     }
   }
   if(LIVE&&LIVE.updated)document.getElementById('updNote').textContent='（最後更新 '+LIVE.updated.slice(0,10)+' UTC）';
+  if(LIVE&&Array.isArray(LIVE.alerts)&&LIVE.alerts.length){
+    document.getElementById('alertBox').hidden=false;
+    document.getElementById('alertLines').innerHTML=LIVE.alerts.map(a=>'<div class="line">'+a.msg+'</div>').join('');
+  }
 
   // ---- Chart: price + stocks-to-use + ENSO bands ----
   const closes=[1015,1020,975,1015,880,870,915,1145,965,1000,1010,920,970,965,1040,880,850,895,900,885,905,940,885,870,1050,1310,1410,1430,1280,1335,1635,1490,1390,1520,1500,1290,1290,1300,1190,1120,1010,980,990,1020,1010,1060,1140,1118];

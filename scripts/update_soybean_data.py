@@ -16,6 +16,7 @@ import os
 import re
 import sys
 import html as htmllib
+import urllib.parse
 import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -251,7 +252,55 @@ def get_oil():
             "share": share, "opt": opt}
 
 
+def eval_alerts(data):
+    """供需緊俏警示:任一成立即列入 island,新出現的另推 Telegram。"""
+    alerts = []
+    for my, pct in (data.get("stu") or {}).get("all") or []:
+        if pct < 6:
+            alerts.append({"code": f"STU_{my}",
+                           "msg": f"庫銷比緊俏:{my} 僅 {pct}%,跌破 6% 易噴區"})
+    enso = data.get("enso") or {}
+    if enso.get("opt") == 0:
+        alerts.append({"code": "LA_NINA",
+                       "msg": f"La Nina Advisory 確立,南美乾旱風險升溫(ONI {enso.get('oni')})"})
+    sa = data.get("sa") or {}
+    if sa.get("window"):
+        for r in sa.get("regions") or []:
+            if r["n"] in ("阿根廷核心", "巴西南") and r.get("norm"):
+                ratio = r["p30"] / r["norm"]
+                fc_norm14 = r["norm"] * 14 / 30
+                if ratio < 0.6 and r["fc14"] < fc_norm14 * 0.6:
+                    alerts.append({"code": f"SA_DRY_{r['n']}",
+                                   "msg": (f"南美乾旱警示:{r['n']} 30日雨量僅常年 "
+                                           f"{round(ratio * 100)}%,14日預報 {r['fc14']}mm 持續偏乾")})
+    china = data.get("china") or {}
+    if china.get("pace") is not None and china["pace"] >= 1.15:
+        alerts.append({"code": "CHINA_HOT",
+                       "msg": f"中國採購超速:年度承諾達去年同期 {round(china['pace'] * 100)}%"})
+    return alerts
+
+
+def tg_push(text):
+    tok = os.environ.get("TG_BOT_TOKEN")
+    chat = os.environ.get("TG_CHAT_ID")
+    if not tok or not chat:
+        print("  TG not configured, skip push")
+        return
+    body = urllib.parse.urlencode(
+        {"chat_id": chat, "text": text, "disable_web_page_preview": "true"}
+    ).encode()
+    req = urllib.request.Request(
+        f"https://api.telegram.org/bot{tok}/sendMessage", data=body, headers=UA
+    )
+    with urllib.request.urlopen(req, timeout=30) as r:
+        r.read()
+    print("  TG alert pushed")
+
+
 def main():
+    if "--test-alert" in sys.argv:
+        tg_push("黃豆儀表板測試:警示通道已接通\nhttps://ianlife4.github.io/soybean/")
+        return 0
     htmltext = INDEX.read_text(encoding="utf-8")
     m = ISLAND_RE.search(htmltext)
     if not m:
@@ -284,12 +333,25 @@ def main():
         print("FATAL: all sources failed, leaving file untouched")
         return 1
 
+    data["alerts"] = eval_alerts(data)
+
     # 真正的資料(排除時間戳)沒變就不碰檔案,避免無意義 commit 與 Pages rebuild
     # 經 JSON 正規化比對,否則新資料的 tuple 與讀回的 list 永不相等
     canon = lambda d: json.loads(json.dumps({k: v for k, v in d.items() if k != "updated"}))  # noqa: E731
     if canon(old) == canon(data):
         print(f"no data change (ok={ok}); leaving file untouched")
         return 0
+
+    # 只推播「新出現」的警示,既有警示持續顯示於頁面但不重複轟炸
+    old_codes = {a.get("code") for a in old.get("alerts") or []}
+    fresh = [a for a in data["alerts"] if a["code"] not in old_codes]
+    if fresh:
+        try:
+            tg_push("黃豆儀表板警示\n"
+                    + "\n".join("· " + a["msg"] for a in fresh)
+                    + "\nhttps://ianlife4.github.io/soybean/")
+        except Exception as e:  # noqa: BLE001
+            print(f"  TG push failed (non-fatal): {e}")
 
     data["updated"] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     new_json = json.dumps(data, ensure_ascii=True, separators=(",", ":"))
