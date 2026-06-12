@@ -186,8 +186,9 @@ def main():
         return 1
 
     # 真正的資料(排除時間戳)沒變就不碰檔案,避免無意義 commit 與 Pages rebuild
-    strip = lambda d: {k: v for k, v in d.items() if k != "updated"}  # noqa: E731
-    if strip(old) == strip(data):
+    # 經 JSON 正規化比對,否則新資料的 tuple 與讀回的 list 永不相等
+    canon = lambda d: json.loads(json.dumps({k: v for k, v in d.items() if k != "updated"}))  # noqa: E731
+    if canon(old) == canon(data):
         print(f"no data change (ok={ok}); leaving file untouched")
         return 0
 
