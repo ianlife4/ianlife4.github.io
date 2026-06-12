@@ -125,7 +125,7 @@
     <h1>Bull-Bear Dashboard<span class="zh">黃豆多空儀表板</span></h1>
   </div>
   <div class="price-chip">
-    <div class="sym">ZS · ¢/bu</div>
+    <div class="sym" id="sym">ZS · ¢/bu</div>
     <div class="px" id="px">1,118<small> -5.25</small></div>
     <div class="dt" id="dt">as of —</div>
   </div>
@@ -182,7 +182,7 @@
       <span class="lab">過剩<small>glut</small></span>
       <span class="tag bear">Bear</span>
     </div>
-    <p class="thr-foot">2025/26 ≈ 8.0% · 2024/25 ≈ 7.4% · 2026/27 預估 6.9%。跌破 ~6% 價格開始變敏感；站上 8–10% 通常被壓著。</p>
+    <p class="thr-foot"><span id="stuVals">2025/26 ≈ 8.0% · 2024/25 ≈ 7.4% · 2026/27 預估 6.9%</span>。跌破 ~6% 價格開始變敏感；站上 8–10% 通常被壓著。</p>
   </section>
 </div>
 
@@ -204,14 +204,23 @@
 
 <footer>
   <p><strong>傳導鏈：</strong>ENSO 相位 → 南美作物天氣（12–3 月）→ WASDE 庫銷比修正 → 價格。供給是其中一條主線，需求衝擊（中國採購、生質柴油）與貿易政策同樣會改寫庫存（如 2018/19 貿易戰造成 22% 庫存大爆）。</p>
-  <p style="margin-top:8px"><strong>資料來源：</strong>USDA WASDE（庫存／庫銷比，2024/25、2025/26 採最新報告）、NOAA/WMO ENSO 更新、CBOT 季度價格。逐季價格與庫銷比為近似還原值，精算請對 USDA Consolidated Historical WASDE CSV。本工具為研究輔助，非投資建議。</p>
+  <p style="margin-top:8px"><strong>資料來源：</strong>USDA WASDE（庫存／庫銷比）、NOAA CPC（ENSO 狀態）、Yahoo Finance（ZS／DXY）。價格、ENSO、庫銷比、美元由 GitHub Actions 每日自動更新<span id="updNote"></span>；南美天氣、中國買盤、生柴維持手動判讀。歷史逐季價格與庫銷比為近似還原值，精算請對 USDA Consolidated Historical WASDE CSV。本工具為研究輔助，非投資建議。</p>
 </footer>
 
+<script type="application/json" id="live">{"price":{"last":1115.25,"chg":-0.5,"asOf":"2026-06-11","contract":"Soybean Futures,Jul-2026"},"dxy":{"chg20d":0.0093,"opt":1},"enso":{"status":"El Ni\u00f1o Advisory","oni":0.48,"opt":3},"stu":{"my":"2025/26","pct":8.0,"opt":2,"all":[["2024/25",7.4],["2025/26",8.0],["2026/27",6.9]],"wasde":"2026-06-11"},"updated":"2026-06-12T03:14:47Z"}</script>
 <script>
 (function(){
+  let LIVE=null;
+  try{const o=JSON.parse(document.getElementById('live').textContent); if(o&&Object.keys(o).length)LIVE=o;}catch(e){}
+
   const dtEl=document.getElementById('dt');
-  const d=new Date();
-  dtEl.textContent='as of '+d.toLocaleDateString('en-CA');
+  if(LIVE&&LIVE.price&&LIVE.price.asOf){dtEl.textContent='as of '+LIVE.price.asOf;}
+  else{dtEl.textContent='as of '+new Date().toLocaleDateString('en-CA');}
+  if(LIVE&&LIVE.price&&LIVE.price.last!=null){
+    const p=LIVE.price;
+    document.getElementById('px').innerHTML=p.last.toLocaleString('en-US')+(p.chg!=null?'<small> '+(p.chg>=0?'+':'')+p.chg.toFixed(2)+'</small>':'');
+    if(p.contract&&p.contract.indexOf(',')>-1)document.getElementById('sym').textContent='ZS '+p.contract.split(',')[1].trim()+' · ¢/bu';
+  }
 
   const signals=[
     {key:'enso', en:'ENSO phase', zh:'聖嬰相位', hint:'供給端領先指標', def:2,
@@ -227,6 +236,13 @@
     {key:'usd', en:'USD / macro', zh:'美元/總經', hint:'計價貨幣與資金面', def:1,
       opts:[{l:'Weak USD',s:'弱勢',v:1},{l:'Neutral',s:'中性',v:0},{l:'Strong USD',s:'強勢',v:-1}]}
   ];
+
+  if(LIVE){
+    const byKey=k=>signals.find(s=>s.key===k);
+    if(LIVE.enso&&Number.isInteger(LIVE.enso.opt))byKey('enso').def=LIVE.enso.opt;
+    if(LIVE.stu&&Number.isInteger(LIVE.stu.opt))byKey('stu').def=LIVE.stu.opt;
+    if(LIVE.dxy&&Number.isInteger(LIVE.dxy.opt))byKey('usd').def=LIVE.dxy.opt;
+  }
 
   let maxBull=0, maxBear=0;
   signals.forEach(s=>{const vs=s.opts.map(o=>o.v); maxBull+=Math.max(...vs); maxBear+=Math.min(...vs); s.cur=s.def;});
@@ -290,12 +306,35 @@
   }
   render();
 
+  // ---- 即時資料帶入閾值卡與頁尾 ----
+  if(LIVE&&LIVE.stu&&Number.isInteger(LIVE.stu.opt)){
+    const rows=document.querySelectorAll('.thr');
+    rows.forEach(r=>{r.classList.remove('cur'); const f=r.querySelector('.cur-flag'); if(f)f.remove();});
+    const row=rows[LIVE.stu.opt];
+    if(row){row.classList.add('cur');
+      const f=document.createElement('span'); f.className='cur-flag';
+      f.textContent='NOW · '+LIVE.stu.pct.toFixed(1)+'% ('+LIVE.stu.my+')'; row.prepend(f);}
+    if(LIVE.stu.all){
+      const cur=LIVE.stu.my;
+      const items=LIVE.stu.all.slice().sort((a,b)=>a[0]<b[0]?-1:1);
+      const ordered=[...items.filter(i=>i[0]===cur),...items.filter(i=>i[0]!==cur)];
+      document.getElementById('stuVals').textContent=ordered.map(i=>i[0]+(i[0]>cur?' 預估 ':' ≈ ')+i[1].toFixed(1)+'%').join(' · ');
+    }
+  }
+  if(LIVE&&LIVE.updated)document.getElementById('updNote').textContent='（最後更新 '+LIVE.updated.slice(0,10)+' UTC）';
+
   // ---- Chart: price + stocks-to-use + ENSO bands ----
   const closes=[1015,1020,975,1015,880,870,915,1145,965,1000,1010,920,970,965,1040,880,850,895,900,885,905,940,885,870,1050,1310,1410,1430,1280,1335,1635,1490,1390,1520,1500,1290,1290,1300,1190,1120,1010,980,990,1020,1010,1060,1140,1118];
   const stu=[2.6,5.3,5.3,5.3,5.3,5.3,5.3,5.3,5.3,7.1,7.1,7.1,7.1,10.5,10.5,10.5,10.5,22.4,22.4,22.4,22.4,13.3,13.3,13.3,13.3,5.7,5.7,5.7,5.7,6.1,6.1,6.1,6.1,6.1,6.1,6.1,6.1,8.0,8.0,8.0,8.0,7.4,7.4,7.4,7.4,8.0,8.0,8.0];
   const labels=[], yearTick=[]; let yy=2014, qq=3;
   for(let i=0;i<48;i++){labels.push('Q'+qq+' '+yy); yearTick.push(qq===1?String(yy):(i===0?String(yy):'')); qq++; if(qq>4){qq=1;yy++;}}
   const bands=[{s:1,e:6,t:'el'},{s:9,e:10,t:'la'},{s:13,e:14,t:'la'},{s:17,e:18,t:'el'},{s:24,e:34,t:'la'},{s:36,e:38,t:'el'},{s:41,e:42,t:'la'},{s:45,e:45,t:'la'},{s:47,e:47,t:'el'}];
+  if(LIVE&&LIVE.price&&LIVE.price.last!=null)closes[closes.length-1]=LIVE.price.last;
+  if(LIVE&&LIVE.stu&&LIVE.stu.pct!=null)stu[stu.length-1]=LIVE.stu.pct;
+  if(LIVE&&LIVE.enso&&Number.isInteger(LIVE.enso.opt)){
+    const lb=bands[bands.length-1];
+    if(lb&&lb.e===47){ if(LIVE.enso.opt===0)lb.t='la'; else if(LIVE.enso.opt>=2)lb.t='el'; else bands.pop(); }
+  }
   const elFill='rgba(220,140,60,0.15)', laFill='rgba(90,165,220,0.15)';
   const elText='#e0a93b', laText='#7fb4e5';
   const priceLine='#ece7d9', stuLine='#b6aee8';
@@ -318,11 +357,15 @@
     let p;
     p=dot(31,1490,'#e0604a'); ctx.fillStyle='#e0604a'; ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillText('peak 1,784',p[0],p[1]-7);
     p=dot(23,870,'#4fb286'); ctx.fillStyle='#4fb286'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillText('low 791',p[0],p[1]+7);
-    p=dot(47,1118,'#e0a93b'); ctx.fillStyle='#e0a93b'; ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillText('1,118 now',p[0]-8,p[1]);
-    ctx.fillStyle=elText; ctx.textAlign='right'; ctx.textBaseline='top'; ctx.fillText('2026 El Niño watch',ca.right-2,ca.top+20);
+    const nowV=closes[closes.length-1];
+    p=dot(47,nowV,'#e0a93b'); ctx.fillStyle='#e0a93b'; ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillText(nowV.toLocaleString('en-US')+' now',p[0]-8,p[1]);
+    const ensoTxt=(LIVE&&LIVE.enso&&LIVE.enso.status)?(((LIVE.price&&LIVE.price.asOf)?LIVE.price.asOf.slice(0,4):'')+' '+LIVE.enso.status).trim():'2026 El Niño watch';
+    ctx.fillStyle=elText; ctx.textAlign='right'; ctx.textBaseline='top'; ctx.fillText(ensoTxt,ca.right-2,ca.top+20);
     ctx.restore();
   }};
 
+  const yMin=Math.min(750,Math.floor((Math.min.apply(null,closes)-80)/50)*50);
+  const yMax=Math.max(1850,Math.ceil((Math.max.apply(null,closes)+80)/50)*50);
   new Chart(document.getElementById('chart'),{
     type:'line',
     data:{labels:labels, datasets:[
@@ -333,7 +376,7 @@
       plugins:{legend:{display:false}, tooltip:{enabled:false}},
       scales:{
         x:{grid:{display:false}, ticks:{color:tickCol, font:{size:11}, autoSkip:false, maxRotation:0, minRotation:0, callback:(v,i)=>yearTick[i]}},
-        y:{position:'left', min:750, max:1850, grid:{color:grid}, title:{display:true,text:'Price (¢/bu)',color:tickCol,font:{size:11}}, ticks:{color:tickCol, font:{size:11}, stepSize:250}},
+        y:{position:'left', min:yMin, max:yMax, grid:{color:grid}, title:{display:true,text:'Price (¢/bu)',color:tickCol,font:{size:11}}, ticks:{color:tickCol, font:{size:11}, stepSize:250}},
         y1:{position:'right', min:0, max:25, grid:{display:false}, title:{display:true,text:'Stocks-to-use (%)',color:stuLine,font:{size:11}}, ticks:{color:stuLine, font:{size:11}, stepSize:5, callback:v=>v+'%'}}
       }
     }, plugins:[bg,ann]

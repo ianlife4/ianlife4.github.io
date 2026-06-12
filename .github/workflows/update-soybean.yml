@@ -1,0 +1,39 @@
+name: Update soybean data
+
+on:
+  schedule:
+    # 21:05 UTC = 台灣 05:05,CBOT 日盤結算後;同日可吃到 WASDE(16/17 UTC 發布)
+    - cron: '5 21 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-soybean
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fetch live data into index.html
+        run: python scripts/update_soybean_data.py
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet; then
+            echo "no changes"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add soybean/index.html
+            git commit -m "chore: update soybean live data"
+            git push
+          fi
