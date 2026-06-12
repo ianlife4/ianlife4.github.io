@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>黃豆多空儀表板 · Soybean Bull-Bear Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root{
+    --ink:#121419; --ink-2:#191c22; --ink-3:#21252d; --line:#2b303a;
+    --gold:#e0a93b; --gold-dim:#a87f2a;
+    --bull:#4fb286; --bull-dim:#2f6e54;
+    --bear:#e0604a; --bear-dim:#8c3a2c;
+    --slate:#6e7787;
+    --text:#ece7d9; --dim:#9a958a; --faint:#6b6760;
+    --f-disp:'Space Grotesk',sans-serif;
+    --f-mono:'IBM Plex Mono',monospace;
+    --f-body:'Noto Sans TC','Space Grotesk',sans-serif;
+    --r:10px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    background:var(--ink); color:var(--text); font-family:var(--f-body);
+    line-height:1.6; font-size:15px; letter-spacing:.01em;
+    padding:28px 20px 60px; max-width:1080px; margin:0 auto;
+    background-image:radial-gradient(circle at 18% -8%, rgba(224,169,59,.05), transparent 45%);
+  }
+  a{color:var(--gold);text-decoration:none}
+  .eyebrow{font-family:var(--f-mono); font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--gold-dim)}
+
+  header{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px; padding-bottom:20px; border-bottom:1px solid var(--line); margin-bottom:26px}
+  header h1{font-family:var(--f-disp); font-weight:600; font-size:27px; letter-spacing:-.01em; line-height:1.15; margin-top:6px}
+  header h1 .zh{font-family:var(--f-body); font-weight:500; color:var(--dim); font-size:18px; display:block; letter-spacing:0}
+  .price-chip{font-family:var(--f-mono); text-align:right; line-height:1.3}
+  .price-chip .sym{font-size:11px; color:var(--faint); letter-spacing:.12em}
+  .price-chip .px{font-size:26px; font-weight:600; color:var(--text)}
+  .price-chip .px small{font-size:13px; color:var(--dim); font-weight:400}
+  .price-chip .dt{font-size:11px; color:var(--faint); margin-top:2px}
+
+  .verdict{background:var(--ink-2); border:1px solid var(--line); border-radius:var(--r); padding:22px 24px; margin-bottom:22px}
+  .verdict-top{display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:10px}
+  .verdict-word{font-family:var(--f-disp); font-weight:700; font-size:38px; letter-spacing:-.01em; line-height:1; transition:color .35s ease}
+  .verdict-word .en{display:block; font-size:13px; font-weight:500; letter-spacing:.04em; margin-top:6px; color:var(--dim)}
+  .verdict-score{font-family:var(--f-mono); text-align:right}
+  .verdict-score .big{font-size:34px; font-weight:600; transition:color .35s ease}
+  .verdict-score .max{font-size:13px; color:var(--faint)}
+  .verdict-note{font-size:13px; color:var(--dim); margin-top:6px; max-width:62ch}
+
+  .meter{margin-top:20px}
+  .meter-track{position:relative; height:14px; border-radius:7px; overflow:visible;
+    background:linear-gradient(90deg, var(--bear) 0%, #5a4a44 30%, var(--slate) 50%, #44604f 70%, var(--bull) 100%);}
+  .meter-mid{position:absolute; top:-4px; bottom:-4px; left:50%; width:1px; background:rgba(255,255,255,.25)}
+  .meter-marker{position:absolute; top:-7px; width:3px; height:28px; border-radius:2px; background:var(--text);
+    box-shadow:0 0 0 3px var(--ink-2); transform:translateX(-50%); transition:left .4s cubic-bezier(.22,1,.36,1)}
+  .meter-scale{display:flex; justify-content:space-between; font-family:var(--f-mono); font-size:11px; color:var(--faint); margin-top:12px; letter-spacing:.08em}
+
+  .grid2{display:grid; grid-template-columns:1.55fr 1fr; gap:18px; margin-bottom:22px}
+  .panel{background:var(--ink-2); border:1px solid var(--line); border-radius:var(--r); padding:20px 22px}
+  .panel h2{font-family:var(--f-disp); font-weight:600; font-size:16px; margin-bottom:4px}
+  .panel h2 .zh{font-family:var(--f-body); color:var(--dim); font-weight:400; font-size:13px; margin-left:8px}
+  .panel .sub{font-size:12px; color:var(--faint); margin-bottom:18px}
+
+  .sig{padding:14px 0; border-top:1px solid var(--line)}
+  .sig:first-of-type{border-top:none; padding-top:4px}
+  .sig-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:9px}
+  .sig-name{font-weight:500; font-size:14px}
+  .sig-name .zh{color:var(--dim); font-weight:400; margin-left:7px; font-size:12.5px}
+  .sig-name .hint{display:block; color:var(--faint); font-size:11px; font-weight:400; margin-top:1px}
+  .sig-pts{font-family:var(--f-mono); font-size:15px; font-weight:600; min-width:34px; text-align:right; transition:color .3s}
+  .opts{display:flex; flex-wrap:wrap; gap:6px}
+  .opt{flex:1 1 auto; min-width:0; border:1px solid var(--line); background:transparent; color:var(--dim);
+    border-radius:7px; padding:7px 6px 6px; cursor:pointer; font-family:var(--f-body); font-size:12.5px; font-weight:500;
+    text-align:center; transition:border-color .15s, background .15s, color .15s; line-height:1.25}
+  .opt small{display:block; font-size:10px; color:var(--faint); font-weight:400; margin-top:1px}
+  .opt:hover{border-color:#3c424e; color:var(--text)}
+  .opt:focus-visible{outline:2px solid var(--gold); outline-offset:1px}
+  .opt.on{background:var(--ink-3); color:var(--text); border-color:#454b57}
+  .opt.on small{color:var(--dim)}
+  .opt.on.bull{border-color:var(--bull-dim); box-shadow:inset 0 0 0 1px var(--bull-dim)}
+  .opt.on.bear{border-color:var(--bear-dim); box-shadow:inset 0 0 0 1px var(--bear-dim)}
+
+  .thr{display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:8px; border:1px solid transparent; margin-bottom:8px; background:var(--ink); position:relative}
+  .thr.cur{border-color:var(--gold-dim)}
+  .thr .band{font-family:var(--f-mono); font-size:13px; font-weight:600; min-width:62px}
+  .thr .lab{font-size:13px; flex:1}
+  .thr .lab small{color:var(--faint); display:block; font-size:11px}
+  .thr .tag{font-family:var(--f-mono); font-size:10px; letter-spacing:.08em; padding:2px 7px; border-radius:5px; text-transform:uppercase}
+  .tag.bull{background:rgba(79,178,134,.14); color:var(--bull)}
+  .tag.bear{background:rgba(224,96,74,.14); color:var(--bear)}
+  .cur-flag{position:absolute; right:10px; top:-8px; font-family:var(--f-mono); font-size:9px; letter-spacing:.12em; background:var(--gold); color:#1a1408; padding:1px 6px; border-radius:4px; font-weight:600}
+  .thr-foot{font-size:11.5px; color:var(--faint); margin-top:12px; line-height:1.5}
+
+  .chart-panel{background:var(--ink-2); border:1px solid var(--line); border-radius:var(--r); padding:20px 22px 18px; margin-bottom:22px}
+  .chart-head{display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:8px; margin-bottom:6px}
+  .legend{display:flex; flex-wrap:wrap; gap:13px; align-items:center; font-size:11.5px; color:var(--dim); margin:10px 0 14px}
+  .legend span{display:flex; align-items:center; gap:6px}
+  .lg-sw{width:13px; height:13px; border-radius:3px; display:inline-block}
+  .lg-ln{width:17px; border-top:2px solid; display:inline-block}
+  .chart-wrap{position:relative; width:100%; height:340px}
+
+  footer{border-top:1px solid var(--line); padding-top:18px; font-size:12px; color:var(--faint); line-height:1.65}
+  footer strong{color:var(--dim); font-weight:500}
+
+  @media(max-width:760px){
+    body{padding:22px 14px 50px}
+    header h1{font-size:23px}
+    .grid2{grid-template-columns:1fr}
+    .verdict-word{font-size:32px}
+    .chart-wrap{height:300px}
+  }
+  @media(prefers-reduced-motion:reduce){
+    .meter-marker,.verdict-word,.verdict-score .big,.sig-pts{transition:none}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <span class="eyebrow">CBOT Soybeans · Macro Signal Board</span>
+    <h1>Bull-Bear Dashboard<span class="zh">黃豆多空儀表板</span></h1>
+  </div>
+  <div class="price-chip">
+    <div class="sym">ZS · ¢/bu</div>
+    <div class="px" id="px">1,118<small> -5.25</small></div>
+    <div class="dt" id="dt">as of —</div>
+  </div>
+</header>
+
+<section class="verdict" aria-live="polite">
+  <div class="verdict-top">
+    <div class="verdict-word" id="vWord">中性<span class="en" id="vEn">Neutral</span></div>
+    <div class="verdict-score">
+      <span class="big" id="vScore">0</span>
+      <span class="max" id="vMax">/ ±13</span>
+    </div>
+  </div>
+  <p class="verdict-note" id="vNote">調整下方訊號，指針會即時反映供需＋天氣的綜合偏向。供給端訊號（ENSO、南美天氣、庫銷比）權重最高。</p>
+  <div class="meter">
+    <div class="meter-track">
+      <div class="meter-mid"></div>
+      <div class="meter-marker" id="marker" style="left:50%"></div>
+    </div>
+    <div class="meter-scale">
+      <span>偏空 BEAR</span><span>中性 NEUTRAL</span><span>偏多 BULL</span>
+    </div>
+  </div>
+</section>
+
+<div class="grid2">
+  <section class="panel">
+    <h2>Signal scorecard<span class="zh">訊號計分卡</span></h2>
+    <p class="sub">點選每項當前狀態 · 分數即時加總</p>
+    <div id="signals"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Stocks-to-use<span class="zh">庫銷比閾值</span></h2>
+    <p class="sub">美國黃豆庫銷比與價格敏感度</p>
+    <div class="thr">
+      <span class="band" style="color:var(--bull)">&lt; 6%</span>
+      <span class="lab">易噴<small>tight, price explosive</small></span>
+      <span class="tag bull">Bull</span>
+    </div>
+    <div class="thr">
+      <span class="band" style="color:var(--bull)">6–8%</span>
+      <span class="lab">偏緊<small>firm</small></span>
+      <span class="tag bull">Lean bull</span>
+    </div>
+    <div class="thr cur">
+      <span class="cur-flag">NOW · 8%</span>
+      <span class="band" style="color:var(--bear)">8–10%</span>
+      <span class="lab">偏鬆<small>comfortable</small></span>
+      <span class="tag bear">Lean bear</span>
+    </div>
+    <div class="thr">
+      <span class="band" style="color:var(--bear)">&gt; 10%</span>
+      <span class="lab">過剩<small>glut</small></span>
+      <span class="tag bear">Bear</span>
+    </div>
+    <p class="thr-foot">2025/26 ≈ 8.0% · 2024/25 ≈ 7.4% · 2026/27 預估 6.9%。跌破 ~6% 價格開始變敏感；站上 8–10% 通常被壓著。</p>
+  </section>
+</div>
+
+<section class="chart-panel">
+  <div class="chart-head">
+    <h2 style="font-family:var(--f-disp);font-weight:600;font-size:16px">Price vs stocks-to-use vs ENSO<span style="font-family:var(--f-body);color:var(--dim);font-weight:400;font-size:13px;margin-left:8px">2014–2026</span></h2>
+  </div>
+  <div class="legend">
+    <span><i class="lg-sw" style="background:#dc8c3c"></i>El Niño</span>
+    <span><i class="lg-sw" style="background:#5aa5dc"></i>La Niña</span>
+    <span><i class="lg-sw" style="background:transparent;border:1px dashed var(--slate)"></i>Neutral</span>
+    <span><i class="lg-ln" style="border-color:#ece7d9"></i>Price (close)</span>
+    <span><i class="lg-ln" style="border-color:#b6aee8"></i>Stocks-to-use</span>
+  </div>
+  <div class="chart-wrap">
+    <canvas id="chart" role="img" aria-label="US soybean quarterly close price and marketing-year stocks-to-use ratio, 2014 to 2026, with El Nino and La Nina background bands. Price and stocks-to-use move inversely.">Soybean price, stocks-to-use ratio and ENSO phase, 2014 to 2026.</canvas>
+  </div>
+</section>
+
+<footer>
+  <p><strong>傳導鏈：</strong>ENSO 相位 → 南美作物天氣（12–3 月）→ WASDE 庫銷比修正 → 價格。供給是其中一條主線，需求衝擊（中國採購、生質柴油）與貿易政策同樣會改寫庫存（如 2018/19 貿易戰造成 22% 庫存大爆）。</p>
+  <p style="margin-top:8px"><strong>資料來源：</strong>USDA WASDE（庫存／庫銷比，2024/25、2025/26 採最新報告）、NOAA/WMO ENSO 更新、CBOT 季度價格。逐季價格與庫銷比為近似還原值，精算請對 USDA Consolidated Historical WASDE CSV。本工具為研究輔助，非投資建議。</p>
+</footer>
+
+<script>
+(function(){
+  const dtEl=document.getElementById('dt');
+  const d=new Date();
+  dtEl.textContent='as of '+d.toLocaleDateString('en-CA');
+
+  const signals=[
+    {key:'enso', en:'ENSO phase', zh:'聖嬰相位', hint:'供給端領先指標', def:2,
+      opts:[{l:'La Niña',s:'南美乾旱',v:2},{l:'Neutral',s:'中性',v:0},{l:'El Niño watch',s:'形成中',v:-1},{l:'El Niño',s:'確立',v:-2}]},
+    {key:'sa', en:'S. America weather', zh:'南美天氣', hint:'12–3月作物窗口 · 單項擺幅最大', def:2,
+      opts:[{l:'Drought',s:'乾旱',v:3},{l:'Mixed',s:'分歧',v:1},{l:'Normal',s:'正常',v:0},{l:'Favorable',s:'有利',v:-2}]},
+    {key:'stu', en:'US stocks-to-use', zh:'美庫銷比', hint:'核心緊俏指標', def:2,
+      opts:[{l:'<6%',s:'緊',v:3},{l:'6–8%',s:'偏緊',v:1},{l:'8–10%',s:'偏鬆',v:-1},{l:'>10%',s:'過剩',v:-3}]},
+    {key:'china', en:'China buying', zh:'中國買盤', hint:'需求驅動主力', def:1,
+      opts:[{l:'Strong',s:'超預期',v:2},{l:'Normal',s:'正常',v:0},{l:'Weak',s:'清淡',v:-2}]},
+    {key:'biofuel', en:'Biofuel / veg oil', zh:'生柴/植物油', hint:'豆油需求', def:0,
+      opts:[{l:'Rising',s:'上升',v:2},{l:'Stable',s:'持平',v:0},{l:'Falling',s:'下滑',v:-2}]},
+    {key:'usd', en:'USD / macro', zh:'美元/總經', hint:'計價貨幣與資金面', def:1,
+      opts:[{l:'Weak USD',s:'弱勢',v:1},{l:'Neutral',s:'中性',v:0},{l:'Strong USD',s:'強勢',v:-1}]}
+  ];
+
+  let maxBull=0, maxBear=0;
+  signals.forEach(s=>{const vs=s.opts.map(o=>o.v); maxBull+=Math.max(...vs); maxBear+=Math.min(...vs); s.cur=s.def;});
+  document.getElementById('vMax').textContent='/ +'+maxBull;
+
+  const wrap=document.getElementById('signals');
+  signals.forEach((s,si)=>{
+    const sig=document.createElement('div'); sig.className='sig';
+    sig.innerHTML='<div class="sig-head"><div class="sig-name">'+s.en+'<span class="zh">'+s.zh+'</span><span class="hint">'+s.hint+'</span></div><div class="sig-pts" id="pts-'+s.key+'"></div></div>';
+    const opts=document.createElement('div'); opts.className='opts';
+    s.opts.forEach((o,oi)=>{
+      const b=document.createElement('button'); b.className='opt'; b.type='button';
+      b.setAttribute('aria-pressed', oi===s.cur?'true':'false');
+      b.innerHTML=o.l+'<small>'+o.s+'</small>';
+      b.addEventListener('click',()=>{ s.cur=oi; render(); });
+      opts.appendChild(b); o._el=b;
+    });
+    sig.appendChild(opts); wrap.appendChild(sig);
+  });
+
+  const marker=document.getElementById('marker');
+  const vWord=document.getElementById('vWord'), vEn=document.getElementById('vEn');
+  const vScore=document.getElementById('vScore'), vNote=document.getElementById('vNote');
+
+  function colorFor(frac){ if(frac>=0.15) return getCss('--bull'); if(frac<=-0.15) return getCss('--bear'); return getCss('--text'); }
+  function getCss(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+  function verdict(frac){
+    if(frac>=0.45) return ['強烈偏多','Strong bull','供需與天氣多項共振偏多，留意是否已反映在價格。'];
+    if(frac>=0.15) return ['偏多','Bullish','供給或需求出現利多傾斜，趨勢站多方。'];
+    if(frac>-0.15) return ['中性','Neutral','多空訊號互抵，缺乏明確催化劑，區間整理為主。'];
+    if(frac>-0.45) return ['偏空','Bearish','庫存偏鬆或需求轉弱，價格易被壓制。'];
+    return ['強烈偏空','Strong bear','供給充裕＋需求疲弱，下行壓力明顯。'];
+  }
+
+  function render(){
+    let score=0;
+    signals.forEach(s=>{
+      const o=s.opts[s.cur]; score+=o.v;
+      s.opts.forEach((oo,oi)=>{
+        oo._el.classList.toggle('on', oi===s.cur);
+        oo._el.classList.toggle('bull', oi===s.cur && oo.v>0);
+        oo._el.classList.toggle('bear', oi===s.cur && oo.v<0);
+        oo._el.setAttribute('aria-pressed', oi===s.cur?'true':'false');
+      });
+      const pts=document.getElementById('pts-'+s.key);
+      pts.textContent=(o.v>0?'+':'')+o.v;
+      pts.style.color=o.v>0?getCss('--bull'):(o.v<0?getCss('--bear'):getCss('--dim'));
+    });
+    const range=score>=0?maxBull:-maxBear;
+    const frac=range?score/range:0;
+    const pos=((score-maxBear)/(maxBull-maxBear))*100;
+    marker.style.left=pos+'%';
+    const col=colorFor(frac);
+    marker.style.background=col;
+    const v=verdict(frac);
+    vWord.firstChild.textContent=v[0]; vEn.textContent=v[1];
+    vWord.style.color=col; vScore.style.color=col;
+    vScore.textContent=(score>0?'+':'')+score;
+    vNote.textContent=v[2];
+  }
+  render();
+
+  // ---- Chart: price + stocks-to-use + ENSO bands ----
+  const closes=[1015,1020,975,1015,880,870,915,1145,965,1000,1010,920,970,965,1040,880,850,895,900,885,905,940,885,870,1050,1310,1410,1430,1280,1335,1635,1490,1390,1520,1500,1290,1290,1300,1190,1120,1010,980,990,1020,1010,1060,1140,1118];
+  const stu=[2.6,5.3,5.3,5.3,5.3,5.3,5.3,5.3,5.3,7.1,7.1,7.1,7.1,10.5,10.5,10.5,10.5,22.4,22.4,22.4,22.4,13.3,13.3,13.3,13.3,5.7,5.7,5.7,5.7,6.1,6.1,6.1,6.1,6.1,6.1,6.1,6.1,8.0,8.0,8.0,8.0,7.4,7.4,7.4,7.4,8.0,8.0,8.0];
+  const labels=[], yearTick=[]; let yy=2014, qq=3;
+  for(let i=0;i<48;i++){labels.push('Q'+qq+' '+yy); yearTick.push(qq===1?String(yy):(i===0?String(yy):'')); qq++; if(qq>4){qq=1;yy++;}}
+  const bands=[{s:1,e:6,t:'el'},{s:9,e:10,t:'la'},{s:13,e:14,t:'la'},{s:17,e:18,t:'el'},{s:24,e:34,t:'la'},{s:36,e:38,t:'el'},{s:41,e:42,t:'la'},{s:45,e:45,t:'la'},{s:47,e:47,t:'el'}];
+  const elFill='rgba(220,140,60,0.15)', laFill='rgba(90,165,220,0.15)';
+  const elText='#e0a93b', laText='#7fb4e5';
+  const priceLine='#ece7d9', stuLine='#b6aee8';
+  const grid='rgba(255,255,255,0.05)', tickCol='#9a958a';
+
+  const bg={id:'bg',beforeDatasetsDraw(c){
+    const ctx=c.ctx,ca=c.chartArea,x=c.scales.x; if(!x.getPixelForValue)return;
+    const half=(x.getPixelForValue(1)-x.getPixelForValue(0))/2;
+    const L=i=>Math.max(ca.left,x.getPixelForValue(i)-half), R=i=>Math.min(ca.right,x.getPixelForValue(i)+half);
+    ctx.save();
+    bands.forEach(b=>{const x0=L(b.s),x1=R(b.e); ctx.fillStyle=b.t==='el'?elFill:laFill; ctx.fillRect(x0,ca.top,x1-x0,ca.bottom-ca.top);});
+    ctx.font='500 12px "IBM Plex Mono", monospace'; ctx.textAlign='center'; ctx.textBaseline='top';
+    bands.forEach(b=>{ if(b.e-b.s>=2){ const cx=(L(b.s)+R(b.e))/2; ctx.fillStyle=b.t==='el'?elText:laText; ctx.fillText(b.t==='el'?'El Niño':'La Niña',cx,ca.top+5);}});
+    ctx.restore();
+  }};
+  const ann={id:'ann',afterDatasetsDraw(c){
+    const ctx=c.ctx,ca=c.chartArea,x=c.scales.x,y=c.scales.y; ctx.save();
+    ctx.font='500 11px "IBM Plex Mono", monospace';
+    function dot(i,v,col){const px=x.getPixelForValue(i),py=y.getPixelForValue(v); ctx.fillStyle=col; ctx.beginPath(); ctx.arc(px,py,4,0,Math.PI*2); ctx.fill(); return [px,py];}
+    let p;
+    p=dot(31,1490,'#e0604a'); ctx.fillStyle='#e0604a'; ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.fillText('peak 1,784',p[0],p[1]-7);
+    p=dot(23,870,'#4fb286'); ctx.fillStyle='#4fb286'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillText('low 791',p[0],p[1]+7);
+    p=dot(47,1118,'#e0a93b'); ctx.fillStyle='#e0a93b'; ctx.textAlign='right'; ctx.textBaseline='middle'; ctx.fillText('1,118 now',p[0]-8,p[1]);
+    ctx.fillStyle=elText; ctx.textAlign='right'; ctx.textBaseline='top'; ctx.fillText('2026 El Niño watch',ca.right-2,ca.top+20);
+    ctx.restore();
+  }};
+
+  new Chart(document.getElementById('chart'),{
+    type:'line',
+    data:{labels:labels, datasets:[
+      {label:'Stocks-to-use', data:stu, yAxisID:'y1', borderColor:stuLine, borderWidth:2, pointRadius:0, stepped:true, fill:false},
+      {label:'Close', data:closes, yAxisID:'y', borderColor:priceLine, borderWidth:2, pointRadius:0, tension:0.25, fill:false}
+    ]},
+    options:{responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{enabled:false}},
+      scales:{
+        x:{grid:{display:false}, ticks:{color:tickCol, font:{size:11}, autoSkip:false, maxRotation:0, minRotation:0, callback:(v,i)=>yearTick[i]}},
+        y:{position:'left', min:750, max:1850, grid:{color:grid}, title:{display:true,text:'Price (¢/bu)',color:tickCol,font:{size:11}}, ticks:{color:tickCol, font:{size:11}, stepSize:250}},
+        y1:{position:'right', min:0, max:25, grid:{display:false}, title:{display:true,text:'Stocks-to-use (%)',color:stuLine,font:{size:11}}, ticks:{color:stuLine, font:{size:11}, stepSize:5, callback:v=>v+'%'}}
+      }
+    }, plugins:[bg,ann]
+  });
+})();
+</script>
+</body>
+</html>
