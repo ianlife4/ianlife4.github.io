@@ -24,6 +24,8 @@ jobs:
           python-version: '3.12'
 
       - name: Fetch live data into index.html
+        env:
+          FAS_API_KEY: ${{ secrets.FAS_API_KEY || 'DEMO_KEY' }}
         run: python scripts/update_soybean_data.py
 
       - name: Commit if changed

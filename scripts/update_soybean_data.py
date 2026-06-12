@@ -2,19 +2,22 @@
 # -*- coding: utf-8 -*-
 """每日抓取黃豆儀表板即時資料,改寫 soybean/index.html 內的 JSON island。
 
-資料源(全部免金鑰):
-  - Yahoo Finance v8 chart  : ZS=F 價格、DX-Y.NYB 美元指數趨勢
+資料源(免金鑰;FAS 可用 secrets.FAS_API_KEY 換正式金鑰):
+  - Yahoo Finance v8 chart  : ZS=F 價格、DX-Y.NYB 美元趨勢、ZL=F/ZM=F 壓榨比
   - NOAA CPC                : ENSO Alert System Status + ONI
   - USDA esmis (Cornell 後繼): 最新 WASDE txt → 美豆庫銷比
+  - Open-Meteo              : 南美三產區 30 日雨量 vs 10 年常年 + 14 日預報
+  - USDA FAS ESR API        : 對中國大豆週淨銷售與年度累計承諾(DEMO_KEY)
 
 任一來源失敗時保留 island 內既有值(idempotent,同 cb-history 模式)。
 """
 import json
+import os
 import re
 import sys
 import html as htmllib
 import urllib.request
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -155,6 +158,99 @@ def get_stu(today):
     }
 
 
+SA_SITES = [
+    ("阿根廷核心", -33.90, -60.57),   # Pergamino
+    ("巴西南", -23.31, -51.16),       # Londrina, Paraná
+    ("馬托", -12.54, -55.71),         # Sorriso, Mato Grosso
+]
+
+
+def get_sa(today):
+    """南美三產區:過去30日雨量、同窗口10年常年值、未來14日預報(mm)。"""
+    regions = []
+    win_start = today - timedelta(days=30)
+    win = {((win_start + timedelta(days=i)).month, (win_start + timedelta(days=i)).day)
+           for i in range(30)}
+    for name, lat, lon in SA_SITES:
+        f = json.loads(fetch(
+            "https://api.open-meteo.com/v1/forecast"
+            f"?latitude={lat}&longitude={lon}&daily=precipitation_sum"
+            "&past_days=31&forecast_days=14&timezone=UTC"
+        ))["daily"]
+        t = today.isoformat()
+        past = [v for d, v in zip(f["time"], f["precipitation_sum"]) if d < t and v is not None][-30:]
+        fut = [v for d, v in zip(f["time"], f["precipitation_sum"]) if d >= t and v is not None][:14]
+        a = json.loads(fetch(
+            "https://archive-api.open-meteo.com/v1/archive"
+            f"?latitude={lat}&longitude={lon}"
+            f"&start_date={today.year - 10}-01-01&end_date={today.year - 1}-12-31"
+            "&daily=precipitation_sum&timezone=UTC"
+        ))["daily"]
+        norm10 = sum(v for d, v in zip(a["time"], a["precipitation_sum"])
+                     if v is not None and (int(d[5:7]), int(d[8:10])) in win)
+        regions.append({"n": name, "p30": round(sum(past)),
+                        "norm": round(norm10 / 10), "fc14": round(sum(fut))})
+    return {"window": today.month in (12, 1, 2, 3), "regions": regions}
+
+
+def esr_my(today):
+    """ESR marketYear 編號:MY 2025/26(2025-09 起算)= 2026。"""
+    return today.year + 1 if today.month >= 9 else today.year
+
+
+def get_china(today):
+    """對中國大豆:最新週淨銷售、4週合計、年度累計承諾與去年同期比。"""
+    key = os.environ.get("FAS_API_KEY", "DEMO_KEY")
+    url = ("https://api.fas.usda.gov/api/esr/exports/commodityCode/801"
+           "/allCountries/marketYear/{}?api_key=" + key)
+    my = esr_my(today)
+    cur = sorted((r for r in json.loads(fetch(url.format(my)))
+                  if r["countryCode"] == 5700), key=lambda r: r["weekEndingDate"])
+    if not cur:
+        raise ValueError("no China rows in current MY")
+    last = cur[-1]
+    wk = last["weekEndingDate"][:10]
+    net = int(last["currentMYNetSales"])
+    sum4 = int(sum(r["currentMYNetSales"] for r in cur[-4:]))
+    commit = int(last["currentMYTotalCommitment"])
+    pace = None
+    prev_commit = None
+    try:
+        prev = sorted((r for r in json.loads(fetch(url.format(my - 1)))
+                       if r["countryCode"] == 5700), key=lambda r: r["weekEndingDate"])
+        target = (date.fromisoformat(wk) - timedelta(days=364)).isoformat()
+        cand = [r for r in prev if r["weekEndingDate"][:10] <= target]
+        if cand:
+            prev_commit = int(cand[-1]["currentMYTotalCommitment"])
+            if prev_commit:
+                pace = round(commit / prev_commit, 2)
+    except Exception as e:  # noqa: BLE001
+        print(f"  china prev-MY pace failed (non-fatal): {e}")
+    if pace is not None and pace >= 1.15:
+        hint = 0          # Strong
+    elif (pace is not None and pace <= 0.85) or sum4 < 0:
+        hint = 2          # Weak
+    else:
+        hint = 1          # Normal
+    return {"wk": wk, "net": net, "sum4": sum4, "commit": commit,
+            "prevCommit": prev_commit, "pace": pace, "hint": hint}
+
+
+def get_oil():
+    """生柴/植物油客觀指標:ZL 60交易日漲跌 + 豆油占壓榨產值比。"""
+    zl_res = yahoo_chart("ZL=F", "6mo")
+    zl = float(zl_res["meta"]["regularMarketPrice"])
+    closes = [c for c in zl_res["indicators"]["quote"][0]["close"] if c is not None]
+    base = closes[-61] if len(closes) >= 61 else closes[0]
+    zl60 = round(zl / base - 1, 2)
+    zm = float(yahoo_chart("ZM=F", "5d")["meta"]["regularMarketPrice"])
+    # 1 蒲式耳 → 約 11 磅油 + 0.0238 短噸粕;share = 油值/(油值+粕值)
+    share = round(11 * zl / (11 * zl + 2.38 * zm), 2)
+    opt = 0 if (zl60 >= 0.08 or share >= 0.45) else (2 if zl60 <= -0.08 else 1)
+    return {"zl": round(zl, 2), "zm": round(zm, 1), "zl60": zl60,
+            "share": share, "opt": opt}
+
+
 def main():
     htmltext = INDEX.read_text(encoding="utf-8")
     m = ISLAND_RE.search(htmltext)
@@ -174,6 +270,9 @@ def main():
         ("dxy", get_dxy),
         ("enso", get_enso),
         ("stu", lambda: get_stu(now.date())),
+        ("sa", lambda: get_sa(now.date())),
+        ("china", lambda: get_china(now.date())),
+        ("oil", get_oil),
     ):
         try:
             data[key] = fn()

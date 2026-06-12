@@ -83,6 +83,17 @@
   .opt.on.bull{border-color:var(--bull-dim); box-shadow:inset 0 0 0 1px var(--bull-dim)}
   .opt.on.bear{border-color:var(--bear-dim); box-shadow:inset 0 0 0 1px var(--bear-dim)}
 
+  .evi{font-family:var(--f-mono); font-size:11px; color:var(--faint); margin-top:9px; line-height:1.7}
+  .evi b{color:var(--gold); font-weight:600}
+  .evi .dim{color:#54504a}
+  details.how{margin-top:7px}
+  details.how summary{cursor:pointer; font-size:11px; color:var(--dim); font-family:var(--f-mono); letter-spacing:.06em; list-style:none; user-select:none}
+  details.how summary::-webkit-details-marker{display:none}
+  details.how summary::before{content:'+ '; color:var(--gold-dim)}
+  details.how[open] summary::before{content:'- '}
+  details.how .body{font-size:12px; color:var(--dim); margin-top:7px; line-height:1.75; border-left:2px solid var(--line); padding-left:10px}
+  details.how .body b{color:var(--text); font-weight:500}
+
   .thr{display:flex; align-items:center; gap:12px; padding:11px 12px; border-radius:8px; border:1px solid transparent; margin-bottom:8px; background:var(--ink); position:relative}
   .thr.cur{border-color:var(--gold-dim)}
   .thr .band{font-family:var(--f-mono); font-size:13px; font-weight:600; min-width:62px}
@@ -204,10 +215,10 @@
 
 <footer>
   <p><strong>傳導鏈：</strong>ENSO 相位 → 南美作物天氣（12–3 月）→ WASDE 庫銷比修正 → 價格。供給是其中一條主線，需求衝擊（中國採購、生質柴油）與貿易政策同樣會改寫庫存（如 2018/19 貿易戰造成 22% 庫存大爆）。</p>
-  <p style="margin-top:8px"><strong>資料來源：</strong>USDA WASDE（庫存／庫銷比）、NOAA CPC（ENSO 狀態）、Yahoo Finance（ZS／DXY）。價格、ENSO、庫銷比、美元由 GitHub Actions 每日自動更新<span id="updNote"></span>；南美天氣、中國買盤、生柴維持手動判讀。歷史逐季價格與庫銷比為近似還原值，精算請對 USDA Consolidated Historical WASDE CSV。本工具為研究輔助，非投資建議。</p>
+  <p style="margin-top:8px"><strong>資料來源：</strong>USDA WASDE（庫銷比）、NOAA CPC（ENSO）、Yahoo Finance（ZS／DXY／ZL／ZM）、Open-Meteo（南美三產區雨量）、USDA FAS ESR（對華出口銷售）。以上由 GitHub Actions 每日自動更新<span id="updNote"></span>；ENSO／庫銷比／美元／生柴自動預選，南美天氣與中國買盤帶入參考數據後由人工點選。歷史逐季價格與庫銷比為近似還原值，精算請對 USDA Consolidated Historical WASDE CSV。本工具為研究輔助，非投資建議。</p>
 </footer>
 
-<script type="application/json" id="live">{"price":{"last":1115.25,"chg":-0.5,"asOf":"2026-06-11","contract":"Soybean Futures,Jul-2026"},"dxy":{"chg20d":0.01,"opt":1},"enso":{"status":"El Ni\u00f1o Advisory","oni":0.48,"opt":3},"stu":{"my":"2025/26","pct":8.0,"opt":2,"all":[["2024/25",7.4],["2025/26",8.0],["2026/27",6.9]],"wasde":"2026-06-11"},"updated":"2026-06-12T03:25:32Z"}</script>
+<script type="application/json" id="live">{"price":{"last":1113.0,"chg":-2.75,"asOf":"2026-06-11","contract":"Soybean Futures,Jul-2026"},"dxy":{"chg20d":0.01,"opt":1},"enso":{"status":"El Ni\u00f1o Advisory","oni":0.48,"opt":3},"stu":{"my":"2025/26","pct":8.0,"opt":2,"all":[["2024/25",7.4],["2025/26",8.0],["2026/27",6.9]],"wasde":"2026-06-11"},"updated":"2026-06-12T04:08:31Z","sa":{"window":false,"regions":[{"n":"\u963f\u6839\u5ef7\u6838\u5fc3","p30":17,"norm":51,"fc14":3},{"n":"\u5df4\u897f\u5357","p30":150,"norm":106,"fc14":68},{"n":"\u99ac\u6258","p30":8,"norm":13,"fc14":3}]},"china":{"wk":"2026-06-04","net":2086,"sum4":86209,"commit":11956436,"prevCommit":22478500,"pace":0.53,"hint":2},"oil":{"zl":74.12,"zm":302.7,"zl60":0.12,"share":0.53,"opt":0}}</script>
 <script>
 (function(){
   let LIVE=null;
@@ -242,7 +253,37 @@
     if(LIVE.enso&&Number.isInteger(LIVE.enso.opt))byKey('enso').def=LIVE.enso.opt;
     if(LIVE.stu&&Number.isInteger(LIVE.stu.opt))byKey('stu').def=LIVE.stu.opt;
     if(LIVE.dxy&&Number.isInteger(LIVE.dxy.opt))byKey('usd').def=LIVE.dxy.opt;
+    if(LIVE.oil&&Number.isInteger(LIVE.oil.opt))byKey('biofuel').def=LIVE.oil.opt;
   }
+
+  // 手動訊號的自動參考證據(每日更新)與判讀指南
+  const AUX={};
+  if(LIVE&&LIVE.sa&&LIVE.sa.regions){
+    const w=LIVE.sa.window;
+    AUX.sa='30日雨量/常年 · '+LIVE.sa.regions.map(r=>{
+      const pc=r.norm?Math.round(r.p30/r.norm*100):null;
+      const pct=pc==null?'':(w&&pc<60?' <b>'+pc+'%</b>':' '+pc+'%');
+      return r.n+' '+r.p30+'/'+r.norm+'mm'+pct+'（預報14日 '+r.fc14+'mm）';
+    }).join(' · ')+(w?'':'<span class="dim">　休賽期,窗口 12–3 月</span>');
+  }
+  if(LIVE&&LIVE.china&&LIVE.china.wk){
+    const c=LIVE.china, wan=v=>(v/1e4).toFixed(1);
+    const hot=c.pace!=null&&(c.pace>=1.15||c.pace<=0.85);
+    AUX.china='截至 '+c.wk+' · 週淨銷 '+wan(c.net)+'萬噸 · 4週 '+wan(c.sum4)+'萬噸 · 年度承諾 '
+      +(c.commit/1e6).toFixed(2)+'百萬噸'
+      +(c.pace!=null?' = 去年同期 '+(hot?'<b>':'')+Math.round(c.pace*100)+'%'+(hot?'</b>':''):'')
+      +(Number.isInteger(c.hint)?'　建議 '+['Strong','Normal','Weak'][c.hint]:'');
+  }
+  if(LIVE&&LIVE.oil){
+    const o=LIVE.oil;
+    AUX.biofuel='ZL '+o.zl+'¢ · 60日 '+(o.zl60>=0?'+':'')+Math.round(o.zl60*100)+'% · 油占壓榨值 '
+      +Math.round(o.share*100)+'%（中樞 ~35%）　已自動預選';
+  }
+  const HOW={
+    sa:'<b>只在 12–3 月認真看</b>（巴西結莢 12–2 月、阿根廷 1–2 月），其餘月份放 Normal。馬托格羅索是熱帶雨區幾乎不會旱，會出事的是巴西南部與阿根廷核心區。判讀：雨量比率連三週 <b>&lt;60%</b> 且預報持續落空 → Mixed；主產區連旱三週＋機構下修產量 10% 以上 → Drought；雨水規律且機構上修 → Favorable。紀律：<b>預報轉濕的當週就調回來</b>，乾旱行情雨一來就還錢。每週四可對照 BAGE 評級，good+excellent 三週掉 10 點是警訊。',
+    china:'主指標是<b>年度承諾對去年同期的比率</b>（已自動算好）：<b>≥115% 點 Strong、≤85% 點 Weak</b>，中間 Normal。輔助：美豆出口旺季 9–2 月，旺季連續出現淨取消（週淨銷為負）直接 Weak；6–8 月中國本來就買巴西，清淡是正常不是 Weak。',
+    biofuel:'客觀指標已自動預選：ZL 60 日 ≥+8% 或油占壓榨值 ≥45% → Rising；ZL ≤−8% → Falling。遇 <b>EPA RVO 摻混量、45Z 稅務抵免、再生柴油廠投產或關閉</b>等政策新聞時手動覆寫——政策大於盤面。'
+  };
 
   let maxBull=0, maxBear=0;
   signals.forEach(s=>{const vs=s.opts.map(o=>o.v); maxBull+=Math.max(...vs); maxBear+=Math.min(...vs); s.cur=s.def;});
@@ -260,7 +301,11 @@
       b.addEventListener('click',()=>{ s.cur=oi; render(); });
       opts.appendChild(b); o._el=b;
     });
-    sig.appendChild(opts); wrap.appendChild(sig);
+    sig.appendChild(opts);
+    if(AUX[s.key]){const e=document.createElement('div'); e.className='evi'; e.innerHTML=AUX[s.key]; sig.appendChild(e);}
+    if(HOW[s.key]){const d=document.createElement('details'); d.className='how';
+      d.innerHTML='<summary>怎麼判讀 How to read</summary><div class="body">'+HOW[s.key]+'</div>'; sig.appendChild(d);}
+    wrap.appendChild(sig);
   });
 
   const marker=document.getElementById('marker');
